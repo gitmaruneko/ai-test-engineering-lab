@@ -1,0 +1,17 @@
+Test: BIOS_Update_Test
+Status: FAIL
+
+Error:
+BMC firmware mismatch detected.
+
+Expected BMC version: 2.10
+Actual BMC version: 2.08
+
+SEL:
+Firmware update failed.
+
+GPU:
+PASS
+
+NIC:
+PASS
