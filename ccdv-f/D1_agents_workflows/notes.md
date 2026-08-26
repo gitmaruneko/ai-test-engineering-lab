@@ -313,20 +313,17 @@ In an agent:
 
 ---
 
-## Resources
+#### Resources
+* Claude Cookbooks
+    - `anthropics/claude-cookbooks`
+    - `patterns/agents/basic_workflows.ipynb`
 
-### Claude Cookbooks
-
-- `anthropics/claude-cookbooks`
-- `patterns/agents/basic_workflows.ipynb`
-
-### Video
-
-- [How We Build Effective Agents — Barry Zhang, Anthropic](https://www.youtube.com/watch?v=D7_ipDqhtwk)
+* Video
+    - [How We Build Effective Agents — Barry Zhang, Anthropic](https://www.youtube.com/watch?v=D7_ipDqhtwk)
 
 ---
 
-### Self-Check
+#### Self-Check
 
 After completing this section, I should be able to answer:
 
@@ -340,8 +337,100 @@ After completing this section, I should be able to answer:
 
 ### SDK & Construction
 
+- Agent SDK provides the agent loop:
+  model → tool call → tool result → model → repeat.
+
+- The developer provides:
+  - Goal / prompt
+  - Available tools
+  - Permissions / constraints
+
+- Claude determines the intermediate actions dynamically.
+
+- Built-in general-purpose tools such as Read, Edit, and Bash
+  allow the agent to operate more like a developer.
+
+- Hard requirements should be enforced through deterministic
+  mechanisms such as hooks, guardrails, or permissions rather
+  than relying only on prompts.
+
+- System prompt provides **probabilistic guidance**.
+- Hooks / guardrails provide **deterministic enforcement**.
+- If something MUST happen every time, do not rely only on the model remembering the instruction.
+
+    Exam cue:
+
+    - SHOULD → Prompt
+    - MUST / ALWAYS / NEVER → Hook or guardrail
+
+#### Firmware Example
+
+    Goal:
+    "Find the likely root cause of this firmware test failure."
+
+    Allowed tools:
+    - Read test log
+    - Read SEL
+    - Get firmware inventory
+    - Run diagnostic command
+
+    Possible agent loop:
+
+    Test log
+    → Claude suspects BMC
+    → Read SEL
+    → Claude suspects firmware mismatch
+    → Get FW inventory
+    → Verify version mismatch
+    → Return root cause
+
+
 ### SDK vs Custom Loop
 
+> **Important Reminder — What does "SDK" mean here?**
+>
+> The **Claude Agent SDK is not part of the Claude Desktop application**.
+>
+> It is a developer library installed inside your own project, for example:
+>
+> ```bash
+> pip install claude-agent-sdk
+> ```
+>
+> Then your Python application can use it:
+>
+> ```python
+> from claude_agent_sdk import query
+> ```
+>
+> Think of the difference as:
+>
+> - **Claude Desktop / Claude Code** → ready-to-use products
+> - **Anthropic SDK** → library for calling the Claude API
+> - **Claude Agent SDK** → library for building your own agent, with agent loop, tools, context management, and permissions
+>
+> **Key point:**
+> Agent SDK = something I use **in my own code**, not something I operate inside the Claude desktop app.
+
+#### Exam Cue
+
+- Standard agent requirements → prefer Agent SDK
+- Need low-level / custom control not exposed by SDK → custom loop
+- Do not rebuild existing SDK infrastructure without a clear requirement
+
+#### **Cost Reminder**
+>
+> Installing the Claude Agent SDK is free.
+> Costs come from the model/API calls made while the agent is running.
+> Because an agent may make multiple model calls, use controls such as
+> `max_budget_usd` when cost predictability matters.
+
+#### Lab - SDK installation
+```
+pip install claude-agent-sdk
+```
+#### Resources
+- [Build & deploy agents with the Claude Agent SDK](https://www.youtube.com/watch?v=jNpH_hOFvg4)
 
 ## 3. Agentic Loop
 
