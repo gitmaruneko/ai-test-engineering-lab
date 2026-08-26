@@ -5,13 +5,19 @@
 ## Contents
 
 - [1. Workflow vs Agent](#1-workflow-vs-agent)
-    - [Core Distinction](#core-distinction)
-    - [Exam Cues](#exam-cues)
-    - [Decision Criteria](#decision-criteria)
-    - [Firmware Testing Examples](#firmware-testing-examples)
-    - [Quick Decision Rule](#quick-decision-rule)
-    - [Reference Implementation — Claude Cookbooks](#reference-implementation--claude-cookbooks)
+  - [Core Distinction](#core-distinction)
+  - [Exam Cues](#exam-cues)
+  - [Decision Criteria](#decision-criteria)
+  - [Firmware Testing Examples](#firmware-testing-examples)
+  - [Quick Decision Rule](#quick-decision-rule)
+  - [Reference Implementation — Claude Cookbooks](#reference-implementation--claude-cookbooks)
 - [2. Agent SDK](#2-agent-sdk)
+  - [SDK & Construction](#sdk--construction)
+  - [Firmware Example](#firmware-example)
+  - [SDK vs Custom Loop](#sdk-vs-custom-loop)
+  - [Claude Integration Options](#claude-integration-options)
+  - [Checkpoint](#checkpoint)
+  - [Resources](#resources)
 - [3. Agentic Loop](#3-agentic-loop)
 - [4. Frameworks](#4-frameworks)
 - [5. Multi-Agent](#5-multi-agent)
@@ -358,31 +364,33 @@ After completing this section, I should be able to answer:
 - Hooks / guardrails provide **deterministic enforcement**.
 - If something MUST happen every time, do not rely only on the model remembering the instruction.
 
-    Exam cue:
+Exam cue:
 
-    - SHOULD → Prompt
-    - MUST / ALWAYS / NEVER → Hook or guardrail
+- SHOULD → Prompt
+- MUST / ALWAYS / NEVER → Hook or guardrail
 
 #### Firmware Example
 
-    Goal:
-    "Find the likely root cause of this firmware test failure."
+Goal: "Find the likely root cause of this firmware test failure."
 
-    Allowed tools:
-    - Read test log
-    - Read SEL
-    - Get firmware inventory
-    - Run diagnostic command
+Allowed tools:
 
-    Possible agent loop:
+- Read test log
+- Read SEL
+- Get firmware inventory
+- Run diagnostic command
 
-    Test log
-    → Claude suspects BMC
-    → Read SEL
-    → Claude suspects firmware mismatch
-    → Get FW inventory
-    → Verify version mismatch
-    → Return root cause
+Possible agent loop:
+
+```text
+Test log
+→ Claude suspects BMC
+→ Read SEL
+→ Claude suspects firmware mismatch
+→ Get FW inventory
+→ Verify version mismatch
+→ Return root cause
+```
 
 
 ### SDK vs Custom Loop
@@ -418,19 +426,43 @@ After completing this section, I should be able to answer:
 - Need low-level / custom control not exposed by SDK → custom loop
 - Do not rebuild existing SDK infrastructure without a clear requirement
 
-#### **Cost Reminder**
->
+#### Cost Reminder
+
 > Installing the Claude Agent SDK is free.
 > Costs come from the model/API calls made while the agent is running.
 > Because an agent may make multiple model calls, use controls such as
 > `max_budget_usd` when cost predictability matters.
 
-#### Lab - SDK installation
-```
-pip install claude-agent-sdk
-```
+#### Claude Integration Options
+
+- **Claude Code CLI**
+  → Interactive terminal use.
+
+- **Client SDK**
+  → Direct API access; developer implements the tool loop.
+
+- **Agent SDK**
+  → Build an agent without implementing the tool loop yourself.
+
+- **Managed Agents**
+  → Hosted long-running / asynchronous agents; infrastructure managed for you.
+
+#### Checkpoint
+
+- Agent SDK = Loop + Tools + Context + Permissions
+
+- `allowed_tools` = pre-approved tools
+
+- Providers = Anthropic / Bedrock / Vertex / Foundry
+
+- Custom loop = only when SDK does not expose the control you need
+
 #### Resources
+
 - [Build & deploy agents with the Claude Agent SDK](https://www.youtube.com/watch?v=jNpH_hOFvg4)
+- [Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview)
+- [Building agents with the Claude Agent SDK](https://claude.com/blog/building-agents-with-the-claude-agent-sdk)
+- [Claude Agent SDK for Python](https://github.com/anthropics/claude-agent-sdk-python)
 
 ## 3. Agentic Loop
 
