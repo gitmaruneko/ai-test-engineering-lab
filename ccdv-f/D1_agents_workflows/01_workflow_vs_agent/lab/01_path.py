@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 
 def extract_error(log: str) -> dict:
@@ -103,7 +104,8 @@ def collect_failure_context() -> list[str]:
 
 
 def main():
-    with open(".//test_failure.log", "r", encoding="utf-8") as file:
+    log_path = Path(__file__).with_name("test_failure.log")
+    with log_path.open("r", encoding="utf-8") as file:
         log = file.read()
 
     print("=== Prompt Chaining ===")
