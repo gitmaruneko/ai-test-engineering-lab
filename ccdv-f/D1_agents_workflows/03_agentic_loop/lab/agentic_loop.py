@@ -1,7 +1,7 @@
 """CCDV-F Domain 1 Lab: a minimal mock agentic loop.
 
 Run with:
-    python lab_agentic_loop.py
+    python lab/agentic_loop.py
 
 This program uses only the Python standard library.  It does NOT call an API.
 Instead, mock_model_response() stands in for a model so you can focus on the
