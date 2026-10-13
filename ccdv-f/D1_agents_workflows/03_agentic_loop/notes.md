@@ -1,21 +1,21 @@
-## Agentic Loop, Tool Use & stop_reason
+# Agentic Loop, Tool Use, and `stop_reason`
 
-### Core Idea
+## Core Idea
 
-`stop_reason` tells the application why Claude stopped and what the loop should do next.
+`stop_reason` tells the application why Claude stopped and what the loop should
+do next.
 
-> Text = content
-> `stop_reason` = control signal
+> Text is content; `stop_reason` is the control signal.
 
-### Important stop_reason Values
+## Important `stop_reason` Values
 
-- `end_turn` → response is complete, stop the loop
-- `tool_use` → execute the tool, return `tool_result`, continue
-- `max_tokens` → token limit reached
-- `pause_turn` → resume the server-tool loop
-- `refusal` → Claude declined the request
+- `end_turn`: The response is complete; stop the loop.
+- `tool_use`: Execute the requested tool, return a `tool_result`, and continue.
+- `max_tokens`: The response reached the token limit.
+- `pause_turn`: Resume the server-tool loop.
+- `refusal`: Claude declined the request.
 
-### Tool Round-Trip
+## Tool Round-Trip
 
 ```text
 Define tool
@@ -25,61 +25,86 @@ Define tool
 → Claude continues
 ```
 
-### Review Questions
+## Review Questions
 
-#### 1. Why should you use `stop_reason` instead of judging from the text content?
+### 1. Why use `stop_reason` instead of judging from the response text?
 
-Because the text content may be misleading.
+The text content may be misleading. `stop_reason` is the authoritative control
+signal that tells the application why Claude stopped and what to do next.
 
-`stop_reason` is the authoritative control signal that tells the application why Claude stopped and what to do next.
+> Text is content; `stop_reason` is the control signal.
 
-> Text = content
-> `stop_reason` = control signal
-
----
-
-#### 2. What should you do when `stop_reason` is `end_turn`?
+### 2. What should you do when `stop_reason` is `end_turn`?
 
 Use the response and stop the loop.
 
 ```text
 end_turn
-→ use response
-→ stop
+→ Use the response
+→ Stop
 ```
 
-### 3. What should you do when stop_reason is tool_use?
+### 3. What should you do when `stop_reason` is `tool_use`?
 
-Execute the requested tool, return a tool_result, then continue the loop.
+Execute the requested tool, return a `tool_result` with the matching
+`tool_use_id`, and continue the loop.
+
+```text
 tool_use
-→ execute tool
-→ return tool_result
-→ continue
+→ Execute the requested tool
+→ Return the matching tool_result
+→ Continue the loop
+```
 
-### 4. What is tool_use_id used for?
+### 4. What is `tool_use_id` used for?
 
-It matches a tool_result to the correct tool_use request.
+It correlates a `tool_result` with the exact `tool_use` request it answers.
 
-tool_use_id = correlation ID
+### 5. What is the tool round-trip?
 
-### 5.What is the Tool Round-Trip?
+Define the tool, receive a `tool_use` request, execute the tool, return its
+`tool_result`, and let Claude continue.
 
-Define tool
-→ Claude returns tool_use
-→ Execute tool
-→ Return tool_result
-→ Claude continues
+### 6. What is the difference between a client tool and a server tool?
 
-### 6. What is the difference between a Client Tool and a Server Tool?
+- **Client tool:** Executed by your application or environment.
+- **Server tool:** Executed by the tool provider's infrastructure.
 
-Client Tool → executed in your application / environment
+## Errors and Anti-Patterns
 
-Server Tool → executed on Anthropic infrastructure
+- Do not infer completion from response text; use `stop_reason`.
+- When handling `tool_use`, return a `tool_result` with the matching
+  `tool_use_id`.
+- Validate tool names and inputs before executing requests in a production
+  application.
+- Handle stop reasons other than `tool_use` and `end_turn` explicitly.
+- If a tool fails, return an error result (for example, `is_error: true`) rather
+  than presenting the failure as a successful result.
 
+## Effective Context Engineering for AI Agents
 
-## Errors & Anti-Patterns
+### Core Principle
 
-- Do not infer completion from response text; use `stop_reason` as the control signal.
-- When handling `tool_use`, return a `tool_result` with the matching `tool_use_id`.
-- Validate tool names and inputs before executing requests in a production application.
-- Handle stop reasons other than `tool_use` and `end_turn` explicitly; this mock loop raises an error for unsupported reasons.
+> Keep the smallest set of high-signal tokens needed for the task.
+
+More context is not always better; long contexts can reduce attention and
+retrieval quality.
+
+### Key Techniques
+
+- Just-in-time retrieval
+- Progressive disclosure
+- Compaction
+- Structured note-taking
+- Sub-agent isolation
+
+### Error Recovery
+
+Preserve relevant state, including:
+
+- IDs
+- Previous tool errors
+- Retry count
+- Important task state
+
+> Keep the right context, not the most context.
