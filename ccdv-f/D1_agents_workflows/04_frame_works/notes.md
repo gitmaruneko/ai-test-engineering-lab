@@ -89,6 +89,31 @@ Features:
 
 3. When is PydanticAI the right pick?
    When inputs and outputs must follow a strict schema and be validated.specific input\ output
-
 4. What do all three frameworks have in common (licensing, model support)?
    All three are open-source and model-agnostic.
+
+
+### Context Window Management
+
+Long-running agents can exceed context limits.
+
+Strategies:
+
+- Progressive summarisation
+
+  - Compress older turns
+  - Preserve exact values such as IDs, amounts, and versions
+- `/compact`
+
+  - Claude Code's built-in context compaction
+  - Keeps important facts while reducing context size
+- Scratchpad files
+
+  - Store intermediate results outside the context window
+  - Read them back when needed
+- Memory via tools
+
+  - Store and retrieve important facts across turns
+
+> Compress what can be summarized.
+> Externalize what should be stored and retrieved later.
