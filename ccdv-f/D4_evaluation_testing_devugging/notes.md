@@ -4,28 +4,27 @@
 
 ### 4 Error Types
 
-| Type              | Origin                      | Typical Examples                                         | Fix                                              |
-| ----------------- | --------------------------- | -------------------------------------------------------- | ------------------------------------------------ |
-| Tool Error        | External tool / API failure | DB timeout, API 500, service down, 429                   | Retry with backoff, fallback, `is_error: true` |
-| Reasoning Error   | Model logic / judgment      | Wrong calculation, hallucination, wrong tool selected    | Improve prompt, examples, criteria               |
-| Environment Error | Runtime / infrastructure    | OOM, disk full, permission denied                        | Fix infrastructure                               |
-| Integration Error | Your code / API wiring      | Bad message format, missing `tool_use_id`, parsing bug | Fix integration code                             |
+| Type | Origin | Typical Examples | Fix |
+|---|---|---|---|
+| Tool Error | External tool / API failure | DB timeout, API 500, service down, 429 | Retry with backoff, fallback, `is_error: true` |
+| Reasoning Error | Model logic / judgment | Wrong calculation, hallucination, wrong tool selected | Improve prompt, examples, criteria |
+| Environment Error | Runtime / infrastructure | OOM, disk full, permission denied | Fix infrastructure |
+| Integration Error | Your code / API wiring | Bad message format, missing `tool_use_id`, parsing bug | Fix integration code |
 
 ### HTTP Status Rules
 
 - `400 / 401 / 403 / 404`
-
   - Permanent/request-side problems
   - Fix the request / credentials / permission
   - **Do NOT retry**
-- `429`
 
+- `429`
   - Rate limit
   - Transient
   - **Retry with exponential backoff**
   - Honor `retry-after`
-- `500 / 504 / 529`
 
+- `500 / 504 / 529`
   - Server-side / timeout / overload
   - **Retry with exponential backoff**
 
@@ -34,7 +33,6 @@
 Transient = temporary failure that may recover later.
 
 Examples:
-
 - 429
 - timeout
 - network error
@@ -55,519 +53,680 @@ Tool failures must be explicitly marked:
 }
 ```
 
-# Messages API
+Important:
 
-## The Stateless Messages API
+- Error text alone is NOT enough
+- Without `is_error: true`, Claude may treat the error as normal content
 
-### Core Rule
+### Swallowed Error
 
-> The Messages API is stateless.
+Wrong:
 
-Claude does not remember previous API calls automatically.
-
-The application must send the conversation history on every turn.
-
-### Multi-Turn Conversation
-
-```text
-User message
-→ Send messages[]
-→ Claude response
-→ Append assistant response
-→ Append next user message
-→ Send full messages[] again
+```json
+{
+  "items": []
+}
 ```
 
-## Vision, Prefill & Thinking
+when the real cause was a DB timeout.
 
-### Vision
+This incorrectly looks like:
 
-- Send image blocks together with text.
-- Used for document/image analysis and multimodal workflows.
+> Query succeeded, but there were zero results.
 
-### Prefill
+Correct:
 
-- Seeds the assistant response to steer output format.
-- Not supported on newer models such as Opus 4.6+ / Sonnet 4.6.
+```text
+Tool failure
+→ `is_error: true`
+→ classify as transient if appropriate
+→ retry/recover
+```
 
-### Adaptive Thinking
-
-- The model decides whether and how much to think per request.
-- Can be guided with `effort`.
-- Do not assume every turn includes a thinking block.
-
-### Extended Thinking
-
-- Uses a fixed `budget_tokens`.
-- Minimum budget: 1024.
-- Very large budgets (>32K) may be better suited to Batch API.
-
-### Exam Notes
-
-- More thinking is not always better.
-- Simple tasks may not benefit from thinking.
-- Thinking is incompatible with forced `tool_choice` (`any` / specific tool).
-- Use `tool_choice="auto"` when thinking is enabled.
-
-**Adaptive = let the model decide**
-**Extended = I need explicit budget control**
-
-## Streaming, Batch & Prompt Caching
-
-### 1. SSE Streaming
-
-#### Core Idea
-
-Streaming lets the response arrive incrementally as it is generated.
-
-> Streaming = reduce perceived latency for user-facing applications.
-
-#### Event Flow
-
-`message_start`
-→ many `content_block_delta`
-→ `message_stop`
-
-#### When to Use
-
-- Chatbot
-- Interactive application
-- User is waiting for the answer
-- Need to show output as soon as possible
-
-#### Exam Cue
-
-- User-facing latency → Streaming
-- `overloaded_error` in stream → HTTP 529
+> Never disguise a failure as an empty success.
 
 ---
 
-### 2. Batch API
+# 2. Trace Analysis
 
-#### Core Idea
+## `stop_reason`
 
-Batch API is for large-volume, asynchronous, non-real-time processing.
+First thing to inspect in an agent trace.
 
-> Batch = bulk + async + lower cost
+| stop_reason | Meaning |
+|---|---|
+| `end_turn` | Claude finished naturally |
+| `tool_use` | Mid-loop; Claude expects a tool result |
+| `max_tokens` | Output was truncated |
+| `pause_turn` | Server-tool loop paused |
+| `refusal` | Model declined the request |
 
-#### Course Facts
+Important:
 
-- About 50% lower cost than standard API
-- Up to 100,000 requests or 256 MB per batch
-- Processing window up to 24 hours
-- Results available for 29 days
-- Single-turn only
-- Not suitable for multi-turn agent loops
+> `tool_use` ≠ finished
 
-#### Good Use Cases
+If:
 
-- Overnight processing
-- Large-scale classification
-- Bulk summarization
-- Offline log analysis
-- Weekly reports
+```text
+stop_reason = tool_use
+```
 
-#### Not Suitable For
+the application must:
 
-- Chatbot
-- Interactive user-facing request
-- Blocking CI check
-- Multi-turn agent
+1. Execute the tool
+2. Return `tool_result`
+3. Call Claude again
 
 ---
 
-### 3. Prompt Caching
+## `tool_use_id` Linking
 
-#### Core Idea
+Each tool call has an ID:
 
-Use prompt caching when many requests reuse the same large context.
+```text
+tool_use.id = toolu_123
+```
 
-> Prompt Caching = reduce cost of repeated input context
+The result must reference the same ID:
 
-#### Common Cache Candidates
+```text
+tool_result.tool_use_id = toolu_123
+```
 
-- Tool definitions
-- System prompt
-- Shared examples
-- Long reference documents
-- Policies / guidelines
+Must match exactly.
 
-#### Course Facts
+Wrong:
 
-- Cache read ≈ 10% of normal input price
-- Up to ~90% saving on repeated prefix
-- Minimum cacheable prefix: 1,024 tokens
-- Default TTL: 5 minutes
-- 1-hour TTL available
-- Break-even roughly around 2 requests with the same prefix
+```text
+tool_use.id = toolu_01
+tool_result.tool_use_id = toolu_02
+```
 
----
+→ integration error / HTTP 400
 
-### 4. Stable Prefix
+### Tool Round Trip
 
-Stable prefix means:
+```text
+user
+→ assistant (tool_use)
+→ user (tool_result)
+→ assistant (final response)
+```
 
-> The repeated, unchanged beginning of an API request.
+Because Messages API is stateless, the next API request must include:
 
-Example:
-
-Stable:
-
-- tools
-- system prompt
-- shared reference document
-
-Dynamic:
-
-- current user question
-- timestamp
-- UUID
-- user ID
-- request-specific data
-
-#### Key Rule
-
-> Stable first, dynamic later.
+- previous assistant `tool_use`
+- new user `tool_result`
 
 ---
 
-### 5. Cache Breakpoint
+## Vanishing Result Bug
 
-A cache breakpoint is NOT text like `---`.
+Symptom:
 
-It is defined in the API request using `cache_control`.
+> Claude ignores a valid tool result.
 
-Conceptually:
+First check:
 
-`stable tools`
-→ `stable system prompt`
-→ `stable document`
-→ **cache breakpoint**
-→ `dynamic user input`
+1. Was the previous assistant `tool_use` message preserved?
+2. Does `tool_result.tool_use_id` match `tool_use.id`?
+3. Is the message history correctly assembled?
 
-#### Important
+Typical cause:
 
-The application decides where the cacheable prefix ends.
+```text
+tool_result sent
+BUT previous assistant tool_use was omitted
+```
 
-You do NOT write:
-
-`--- cache starts here`
-
-inside the user's normal prompt.
+→ integration bug
 
 ---
 
-### 6. Common Caching Mistake
+## Runaway Loop
 
-#### Problem
+Symptom:
 
-Dynamic data appears before the cache breakpoint.
+> 50+ turns, every turn is `stop_reason = tool_use`, never finishes.
 
-Example:
+Likely cause:
 
-`timestamp`
-→ `UUID`
-→ `system prompt`
-→ breakpoint
+```text
+tool_choice = "any"
+```
 
-Because timestamp / UUID changes every request, the prefix changes every time.
+`any` forces a tool call every turn.
 
-Result:
+Prefer:
 
-> Cache hit rate ≈ 0%
+```text
+tool_choice = "auto"
+```
 
-#### Fix
+Also define clear completion criteria.
 
-Move dynamic content AFTER the breakpoint.
+### Repeated `max_tokens`
 
-`tools`
-→ `system`
-→ `document`
-→ breakpoint
-→ `timestamp`
-→ `UUID`
-→ `user question`
+If every turn ends with:
 
----
+```text
+stop_reason = max_tokens
+```
 
-### 7. Stream vs Batch vs Cache
-
-#### Decision Rule
-
-- User-facing / interactive → Streaming
-- Large bulk offline work → Batch API
-- Large repeated context → Prompt Caching
-- Blocking workflow → synchronous API
-
-#### Important
-
-Batch + Prompt Caching can be combined.
-
-Example:
-
-50,000 support tickets overnight
-→ Batch API
-
-If every ticket also uses the same system prompt + examples
-→ Batch API + Prompt Caching
-
----
-
-### 8. CI Pre-Merge / Blocking Workflow
-
-#### CI Pre-Merge
-
-Before code is merged, CI runs checks such as:
-
-- unit tests
-- build
-- lint
-- security checks
-- firmware validation
-- AI review
-
-Flow:
-
-PR
-→ run check
-→ PASS → merge
-→ FAIL → block merge
-
-#### Blocking Workflow
-
-A blocking workflow means:
-
-> The next step cannot continue until the current result is available.
-
-Therefore:
-
-Pre-merge CI
-→ needs result now
-→ synchronous API
-
-NOT Batch API.
-
----
-
-### 9. Large Repeated Document Case
-
-Example:
-
-Every request includes the same 100K-token book.
-
-Without cache:
-
-- Claude repeatedly processes the same large context
-- higher input cost
-- slower first token
-
-With prompt caching:
-
-First request:
-→ cache write
-
-Later requests:
-→ cache read
-
-Benefits:
-
-- lower input cost
-- faster time-to-first-token
-
----
-
-### My Questions / Clarifications
-
-#### Q1. What is stable prefix?
-
-It is the part of the API request that stays the same across requests.
-
-Not the user's changing question.
-
-Example:
-
-Stable:
-
-- system prompt
-- tools
-- reference docs
-
-Dynamic:
-
-- user prompt
-- timestamp
-- request data
-
----
-
-#### Q2. Does it mean the first half of the prompt is fixed and the second half changes?
-
-Conceptually yes, but more accurately:
-
-It is not simply "first half vs second half."
-
-The important point is:
-
-> Everything before the cache breakpoint should remain stable.
-
----
-
-#### Q3. What is a cache breakpoint? Is it written in the prompt using `---`?
-
-No.
-
-It is API metadata, usually through `cache_control`.
-
-`---` is only a visual explanation.
-
----
-
-#### Q4. Is prompt caching only for agents?
-
-No.
-
-Prompt caching is an API/application-level feature.
-
-It can be used by:
-
-- normal API calls
-- agents
-- document Q&A systems
-- multi-turn applications
-
-The application does not have to be an agent.
-
----
-
-#### Q5. If every user prompt is different, how can anything be fixed?
-
-You are NOT caching the user's changing prompt.
-
-You cache the repeated background context.
-
-Example:
-
-Fixed:
-
-- system prompt
-- tools
-- company manual
-
-Changing:
-
-- user question
-
-So:
-
-> Cache repeated context, not repeated user questions.
-
----
-
-#### Q6. Do I receive the prompt first and then filter/sort it?
-
-Usually no.
-
-The application should be designed in advance to separate:
-
-- stable context
-- dynamic request content
-
-Flow:
-
-Application defines stable prefix
-→ receives user input
-→ places user input in dynamic section
-→ sends API request
-
----
-
-#### Q7. What is CI pre-merge?
-
-It is an automated check before code is allowed to merge.
-
-Example:
-
-PR
-→ CI test
-→ PASS → merge
-→ FAIL → block
-
-Because the merge is waiting for the result, it is a blocking workflow.
-
----
-
-#### Q8. What is a blocking workflow?
-
-A workflow where the next step cannot proceed until the current step finishes.
-
-Example:
-
-AI validation
-→ wait for result
-→ PASS → merge
-
-Therefore it normally needs a synchronous API call.
-
----
-
-#### Q9. What is Batch API?
-
-Batch API lets you submit many independent requests for asynchronous processing.
-
-Best for:
-
-- lots of data
-- non-real-time jobs
-- overnight processing
-- lower cost
-
-Not for:
-
-- immediate answers
-- chatbot
-- blocking CI
-- multi-turn agent loops
-
----
-
-### Exam Shortcut
-
-> Interactive → Streaming
-> Bulk offline → Batch
-> Repeated context → Cache
-> Blocking workflow → Synchronous
-
-And for caching:
-
-> Stable first, dynamic later.
-
-## The Ignored Convention
-
-### New teammate misses team conventions
-
-Cause:
-
-- Conventions stored in User scope
+→ output is being truncated
 
 Fix:
+- increase `max_tokens`
+- reduce input/context
 
-- Move to Project scope
-- Use `.claude/CLAUDE.md`
-- Commit to git
+---
 
-### CLAUDE.md says "NEVER" but Claude still does it
+## Trace Debugging Rule
 
-Cause:
+Read chronologically.
 
-- CLAUDE.md is probabilistic
+Find:
+
+> **the first turn where behavior diverges from expected**
+
+Do NOT only debug the last wrong answer.
+
+### Trace Checklist
+
+Check:
+
+- `stop_reason`
+- tool results / `is_error`
+- `tool_use_id`
+- message role/order
+- context accumulation
+- reasoning drift
+
+### Reasoning Drift
+
+Reasoning drift = model gradually changes direction across turns even though the technical integration is working.
+
+Example:
+
+```text
+Turn 1 → investigating reboot failure
+Turn 2 → still relevant
+Turn 3 → distracted by minor warning
+Turn 4 → follows wrong hypothesis
+Turn 5 → completely off original goal
+```
+
+---
+
+# 3. Origin Isolation
+
+## Console Replay Test
+
+Goal:
+
+> Determine whether the bug comes from the model/prompt or integration code.
+
+Steps:
+
+1. Log the exact production request
+   - model
+   - messages
+   - tools
+
+2. Replay the SAME request in Anthropic Console
+
+3. Compare results
+
+### Decision
+
+```text
+Same failure in Console
+→ Model / Prompt issue
+
+Console works correctly
+→ Integration Code issue
+```
+
+Console replay removes your application code from the equation.
+
+---
+
+## Common Integration Bugs
+
+- Dropping assistant `tool_use` message
+- `tool_use_id` mismatch
+- Invalid message/role ordering
+- Truncated tool results
+- Bad JSON parsing
+- Application modifies request/response
+
+### Strong Integration Bug Signals
+
+- HTTP 400
+- `tool_use_id not found`
+- Console works, production fails
+
+---
+
+## Syntax vs Semantic Errors
+
+### Syntax Error
+
+Format is invalid.
+
+Examples:
+- malformed JSON
+- missing brace
+- wrong field type
 
 Fix:
+- structured output
+- JSON mode
+- tool/schema enforcement
 
-- Use deterministic enforcement
-- `PreToolUse` hook in `settings.json`
-- `exit code 2` = block
+### Semantic Error
 
-### Exam Pattern
+Format is valid, but value/meaning is wrong.
 
-- Missing team convention → scope issue
-- Ignored hard rule → enforcement issue
+Example:
+
+```json
+{
+  "amount": 150
+}
+```
+
+when invoice says:
+
+```text
+$1,500
+```
+
+The JSON is valid, but the value is wrong.
+
+Fix:
+- improve prompt
+- clearer field descriptions
+- field-level validation
+- cross-check source data
+
+> Structured Output guarantees FORMAT, not correctness.
+
+### Key Rule
+
+```text
+Schema-valid ≠ accurate
+```
+
+---
+
+## Wrong Tool Selected
+
+Wrong tool choice does NOT automatically mean model incompetence.
+
+Check first:
+
+- tool name clarity
+- tool description clarity
+- parameter descriptions
+- overlap between tools
+
+Example:
+
+Bad:
+
+```text
+get_user → lookup customer data
+get_order → lookup customer data
+```
+
+Better:
+
+```text
+get_user → retrieve user profile by user_id
+get_order → retrieve order details by order_id
+```
+
+> Wrong tool selection is often a tool-definition problem.
+
+---
+
+# 4. Recovery Strategies
+
+## Recovery Decision Tree
+
+### Retry with Backoff
+
+Use for transient failures:
+
+- 429
+- timeout
+- network error
+- 500
+- 504
+- 529
+
+Example backoff:
+
+```text
+1s → 2s → 4s → 8s
+```
+
+Do not retry immediately in a tight loop.
+
+---
+
+## Graceful Degradation
+
+Use when part of the system still works.
+
+Example:
+
+```text
+Search tool → works
+Database tool → down
+```
+
+Instead of failing the entire request:
+
+```text
+Return search results
++ clearly report DB unavailable
+```
+
+> Partial failure → return partial value safely.
+
+---
+
+## Escalate to Human
+
+Use when failure is persistent or cannot be solved automatically.
+
+Examples:
+
+- capability gap
+- policy ambiguity
+- no available tool
+- repeated unrecoverable failure
+
+Handoff should include:
+
+- context
+- partial results
+- failure reason
+- recommendation / next step
+
+---
+
+## Model Fallback
+
+Use when API/model is persistently overloaded.
+
+Example:
+
+```text
+529 sustained overload
+→ consider fallback to another available model
+```
+
+---
+
+## Recovery Summary
+
+```text
+Transient
+→ Retry
+
+Partial persistent failure
+→ Graceful degradation
+
+Capability gap / persistent failure
+→ Escalate
+
+Reasoning error
+→ Fix prompt + Eval
+
+Integration error
+→ Fix code + Tests
+```
+
+---
+
+# 5. Eval Methodology
+
+## SMART Criteria
+
+Success criteria should be:
+
+- specific
+- measurable
+
+Good:
+
+```text
+F1 ≥ 0.85 on 10,000 samples
+```
+
+Bad:
+
+```text
+Classify well
+```
+
+---
+
+## Grading Hierarchy
+
+Prefer the cheapest reliable grader:
+
+1. Code-based grading
+2. LLM-as-judge
+3. Human grading
+
+### Code-based
+
+Examples:
+- exact match
+- regex
+- string match
+
+Fast, cheap, deterministic.
+
+### LLM-as-Judge
+
+Use when output is subjective or flexible.
+
+Examples:
+- relevance
+- tone
+- summary quality
+
+### Human Grading
+
+Most expensive and slowest.
+
+Use for:
+- expert review
+- high-risk cases
+- gold-standard evaluation
+
+---
+
+## Eval Structure
+
+A basic eval contains:
+
+```text
+input
+output
+expected
+score
+```
+
+Example:
+
+```text
+input: "This product is amazing!"
+output: "positive"
+expected: "positive"
+score: 1.0
+```
+
+---
+
+## Quality Dimensions
+
+Possible eval dimensions:
+
+- task fidelity
+- consistency
+- relevance
+- tone
+- privacy
+- context use
+- latency
+- price
+
+---
+
+# 6. Regression Testing
+
+## Full Suite Rule
+
+Every behavior-changing update must run the **full eval suite**.
+
+Do NOT test only the cases you intended to fix.
+
+Example:
+
+```text
+Prompt change fixes 3 failing cases
+BUT breaks 2 previously passing cases
+```
+
+→ Regression
+
+→ Reject / rollback the change
+
+Even if:
+
+```text
+Average score improves
+```
+
+regressions still matter.
+
+### Regression Cases
+
+Regression cases = previously fixed bugs kept permanently in the eval suite.
+
+---
+
+## Eval Suite Should Include
+
+- happy paths
+- edge cases
+- error handling
+- adversarial inputs
+- regression cases
+
+Applies to changes in:
+
+- prompts
+- tool definitions
+- system instructions
+- model/configuration
+
+> Every change → run the full suite.
+
+---
+
+# 7. Standard Debug Workflow
+
+For a production agent returning incorrect results:
+
+```text
+1. Reproduce
+2. Trace
+3. Isolate
+4. Fix
+5. Full Eval
+```
+
+### 1. Reproduce
+Create a minimal reproducible case.
+
+### 2. Trace
+Find the first failing turn.
+
+### 3. Isolate
+Use Console Replay to identify:
+
+```text
+Model/Prompt vs Integration
+```
+
+### 4. Fix
+Fix the correct layer:
+
+- prompt
+- tool definition
+- code
+- infrastructure
+
+### 5. Full Eval
+Verify:
+- original failure fixed
+- no regressions introduced
+
+---
+
+# Exam Shortcuts
+
+```text
+400/401/403/404
+→ Fix, don't retry
+
+429
+→ Rate limit
+→ Backoff + retry
+
+500/504/529
+→ Retry with backoff
+
+Tool failure
+→ is_error: true
+
+Claude ignores tool result
+→ Check message history + tool_use_id
+
+50+ tool calls
+→ Check tool_choice="any"
+
+Repeated max_tokens
+→ Output truncation
+
+Console correct, production wrong
+→ Integration bug
+
+Console reproduces same failure
+→ Model / Prompt issue
+
+Valid JSON, wrong value
+→ Semantic error
+
+Wrong tool selected
+→ Check tool definition first
+
+Partial failure
+→ Graceful degradation
+
+Capability gap
+→ Escalate
+
+Any behavior change
+→ Run full eval suite
+
+Debug workflow
+→ Reproduce → Trace → Isolate → Fix → Eval
+```
