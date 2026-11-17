@@ -1,0 +1,99 @@
+[
+  {
+    "id": "T01",
+    "text": "I need a copy of last month's invoice for our records.",
+    "expected_category": "billing",
+    "case": "clear"
+  },
+  {
+    "id": "T02",
+    "text": "The desktop app shows an error whenever I upload a file.",
+    "expected_category": "technical",
+    "case": "clear"
+  },
+  {
+    "id": "T03",
+    "text": "I forgot my password and need to regain access.",
+    "expected_category": "account",
+    "case": "clear"
+  },
+  {
+    "id": "T04",
+    "text": "The dashboard keeps loading after I open the analytics tab.",
+    "expected_category": "technical",
+    "case": "clear",
+    "simulate_bad_draft": true
+  },
+  {
+    "id": "T05",
+    "text": "Where can I submit a suggestion for a new feature?",
+    "expected_category": "general",
+    "case": "clear"
+  },
+  {
+    "id": "T06",
+    "text": "The payment went through and the invoice looks correct, but opening the paid dashboard shows an error.",
+    "expected_category": "technical",
+    "case": "ambiguous"
+  },
+  {
+    "id": "T07",
+    "text": "My main issue is the duplicate charge. The login issue is already resolved.",
+    "expected_category": "billing",
+    "case": "ambiguous"
+  },
+  {
+    "id": "T08",
+    "text": "I mentioned a refund earlier, but my main issue is unlocking my account. I am still locked out.",
+    "expected_category": "account",
+    "case": "ambiguous"
+  },
+  {
+    "id": "T09",
+    "text": "I have questions about an invoice and my login. Can someone help?",
+    "expected_category": "general",
+    "case": "ambiguous"
+  },
+  {
+    "id": "T10",
+    "text": "I was charged after I cancelled my yearly plan. Can you review the transaction?",
+    "expected_category": "billing",
+    "case": "clear"
+  },
+  {
+    "id": "T11",
+    "text": "I am locked out after changing phones and need to regain access.",
+    "expected_category": "account",
+    "case": "clear"
+  },
+  {
+    "id": "T12",
+    "text": "The export keeps loading, then the app displays an error.",
+    "expected_category": "technical",
+    "case": "clear"
+  },
+  {
+    "id": "T13",
+    "text": "I can sign in. My main issue is the duplicate charge. I already reset my password.",
+    "expected_category": "billing",
+    "case": "ambiguous"
+  },
+  {
+    "id": "T14",
+    "text": "The payment went through and I saved the invoice, but the checkout page keeps loading with no way back.",
+    "expected_category": "technical",
+    "case": "ambiguous"
+  },
+  {
+    "id": "T15",
+    "text": "A login error is keeping me out of my account. The status page says the app is up. Please help me recover access.",
+    "expected_category": "account",
+    "case": "ambiguous"
+  },
+  {
+    "id": "T16",
+    "text": "I need a refund and my desktop app keeps showing an error. Both are urgent.",
+    "expected_category": "general",
+    "case": "ambiguous"
+  }
+]

@@ -1,0 +1,3 @@
+anthropic>=0.125,<1
+claude-agent-sdk>=0.2.183,<0.4
+langgraph>=1.2.22,<2
