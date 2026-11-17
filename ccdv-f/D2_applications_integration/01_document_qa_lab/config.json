@@ -1,0 +1,8 @@
+{
+  "model": "claude-sonnet-4-6",
+  "prompt_version": "v1",
+  "max_output_tokens": 1536,
+  "recent_turns": 4,
+  "summary_entries": 6,
+  "max_document_bytes": 98304
+}

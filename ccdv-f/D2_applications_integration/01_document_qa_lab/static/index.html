@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>文件問答 · CCDV-F</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div><span class="domain">CCDV-F / Domain 2</span><h1>文件問答</h1></div>
+    <p id="mode"></p>
+  </header>
+  <main>
+    <aside class="panel document-panel">
+      <h2>文件</h2>
+      <form id="upload">
+        <label for="file">上傳維運報告</label>
+        <input id="file" type="file" accept=".md,.txt" required>
+        <p class="muted" id="file-help">UTF-8 · Markdown 或純文字</p>
+        <button id="upload-button" type="submit" disabled>上傳文件</button>
+      </form>
+      <div class="session" id="session" hidden>
+        <strong id="document-name"></strong>
+        <p class="muted" id="document-info"></p>
+        <button class="secondary" id="restart" type="button">用同一份文件開新對話</button>
+      </div>
+      <p class="error" id="upload-error" role="status" hidden></p>
+    </aside>
+
+    <section class="panel conversation" aria-labelledby="conversation-title">
+      <h2 id="conversation-title">對話</h2>
+      <p id="empty" class="muted">上傳文件後即可提問。</p>
+      <ol id="turns" aria-label="問答紀錄"></ol>
+      <p class="error" id="question-error" role="status" hidden></p>
+      <p class="muted" id="question-status" role="status"></p>
+      <form id="ask" class="composer">
+        <label for="question">你的問題</label>
+        <div class="composer-row">
+          <input id="question" type="text" maxlength="800" placeholder="例如 What triggered the rollback?" required disabled>
+          <button id="ask-button" type="submit" disabled>送出</button>
+        </div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
